@@ -1,0 +1,119 @@
+﻿@page "/chat"
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Web
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="chat-container">
+    <div class="p-3 bg-dark text-white d-flex justify-content-between">
+        <span>Мессенджер AMBE</span>
+        <span class="badge @(IsConnected ? "bg-success" : "bg-danger")">
+            @(IsConnected ? "В сети" : "Подключение...")
+        </span>
+    </div>
+
+    <div class="messages-list" style="height: 300px; overflow-y: auto; background: #f8f9fa; padding: 10px;">
+        @foreach (var msg in messages)
+        {
+            <div class="mb-2"><strong>@msg.User:</strong> @msg.Text</div>
+        }
+    </div>
+
+    <div class="video-section p-2 border-top bg-white d-flex justify-content-around">
+        <div>
+            <small>Вы (локально)</small>
+            <video id="localVideo" autoplay muted playsinline style="width:160px; height:120px; background:black; border-radius:8px;"></video>
+        </div>
+        <div>
+            <small>Эфир (собеседник)</small>
+            <video id="remoteVideo" autoplay playsinline style="width:160px; height:120px; background:black; border-radius:8px;"></video>
+        </div>
+    </div>
+
+    <div class="p-2 text-center bg-light border-top">
+        @if (!isStreaming)
+        {
+            <button class="btn btn-success rounded-pill" @onclick="StartStreaming">🎤 Выйти в эфир</button>
+        }
+        else
+        {
+            <button class="btn btn-danger rounded-pill" @onclick="StopStreaming">🛑 Прекратить трансляцию</button>
+        }
+    </div>
+
+    <div class="p-3 border-top bg-white">
+        <div class="input-group">
+            <input @bind="userName" class="form-control w-25" placeholder="Имя" />
+            <input @bind="newMessage" @onkeyup="HandleKeyPress" class="form-control w-50" placeholder="Сообщение..." />
+            <button class="btn btn-primary" @onclick="Send">OK</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private HubConnection? hubConnection;
+    private List<Message> messages = new();
+    private string userName = "Гость";
+    private string newMessage = "";
+    private bool isStreaming = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/chathub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<string, string>("ReceiveMessage", (user, text) => {
+            messages.Add(new Message { User = user, Text = text });
+            InvokeAsync(StateHasChanged);
+        });
+
+        // Слушаем сигналы WebRTC
+        hubConnection.On<string, string>("ReceiveSignal", async (signal, senderId) => {
+            if (signal.Contains("offer")) {
+                var answer = await JS.InvokeAsync<string>("processOffer", signal);
+                await hubConnection.SendAsync("SendSignal", answer, senderId);
+            } else if (signal.Contains("answer")) {
+                await JS.InvokeVoidAsync("processAnswer", signal);
+            }
+        });
+
+        await hubConnection.StartAsync();
+        
+        // Сразу готовимся принимать видео, если кто-то уже в эфире
+        await JS.InvokeVoidAsync("prepareWebRTC");
+    }
+
+    private async Task StartStreaming()
+    {
+        await JS.InvokeVoidAsync("startLocalVideo", "localVideo");
+        var offer = await JS.InvokeAsync<string>("createOffer");
+        if (hubConnection != null) await hubConnection.SendAsync("SendSignal", offer, "all");
+        isStreaming = true;
+    }
+
+    private async Task StopStreaming()
+    {
+        await JS.InvokeVoidAsync("stopLocalVideo");
+        isStreaming = false;
+    }
+
+    private async Task Send()
+    {
+        if (hubConnection != null && !string.IsNullOrWhiteSpace(newMessage)) {
+            await hubConnection.SendAsync("SendMessage", userName, newMessage);
+            newMessage = "";
+        }
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e) { if (e.Key == "Enter") await Send(); }
+
+    public bool IsConnected => hubConnection?.State == HubConnectionState.Connected;
+
+    public async ValueTask DisposeAsync() { if (hubConnection != null) await hubConnection.DisposeAsync(); }
+
+    public class Message { public string User { get; set; } = ""; public string Text { get; set; } = ""; }
+}

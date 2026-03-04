@@ -1,0 +1,23 @@
+@using Microsoft.AspNetCore.Components.Web
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AMBE Messenger</title>
+    <base href="/" />
+    @* Добавляем слэш в начале, чтобы сервер всегда находил файлы *@
+    <link rel="stylesheet" href="/css/app.css" />
+    @* Если проект называется точно AMBE, оставляем эту строку. Если нет — удаляй *@
+    <link rel="stylesheet" href="/AMBE.styles.css" />
+    <HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+</head>
+<body>
+    <Routes /> 
+    
+    <script src="_framework/blazor.web.js"></script>
+    @* Сюда мы потом вставим скрипт для видеозвонков (WebRTC) *@
+    <script src="/js/webrtc.js"></script>
+    
+</body>
+</html>

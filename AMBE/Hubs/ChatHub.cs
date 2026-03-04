@@ -2,26 +2,33 @@
 
 namespace AMBE.Hubs
 {
-    // Это "диспетчер", который рулит сообщениями и звонками
     public class ChatHub : Hub
     {
-        // 1. Обычный чат: пересылка текста всем
+        // 1. Обычный чат
         public async Task SendMessage(string user, string message)
         {
             await Clients.All.SendAsync("ReceiveMessage", user, message);
         }
 
-        // 2. ЛОГИКА ДЛЯ ЗВОНКОВ (Сигналинг)
-        // Когда один хочет позвонить, он шлет свои данные (offer) другому
-        public async Task SendSignal(string signal, string targetConnectionId)
+        // 2. Улучшенный сигналинг для видео
+        public async Task SendSignal(string signal, string target)
         {
-            await Clients.Client(targetConnectionId).SendAsync("ReceiveSignal", signal, Context.ConnectionId);
+            if (target == "all")
+            {
+                // Рассылаем всем, кроме того, кто звонит
+                await Clients.Others.SendAsync("ReceiveSignal", signal, Context.ConnectionId);
+            }
+            else
+            {
+                // Шлем конкретному человеку (например, ответ на звонок)
+                await Clients.Client(target).SendAsync("ReceiveSignal", signal, Context.ConnectionId);
+            }
         }
 
-        // Уведомление, когда кто-то зашел в сеть
         public override async Task OnConnectedAsync()
         {
-            await Clients.All.SendAsync("UserConnected", Context.ConnectionId);
+            // Сообщаем всем, что новый участник в сети
+            await Clients.Others.SendAsync("UserConnected", Context.ConnectionId);
             await base.OnConnectedAsync();
         }
     }

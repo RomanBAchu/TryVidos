@@ -1,67 +1,71 @@
 let localStream;
-let peerConnections = {}; // Теперь храним много соединений: { connectionId: pc }
+let peerConnections = {};
 let dotNetHelper;
 
 const config = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+        // РСЃРїРѕР»СЊР·СѓРµРј TURN С‡РµСЂРµР· 443 РїРѕСЂС‚ (РїСЂРѕР±РёРІР°РµС‚ РїРѕС‡С‚Рё Р»СЋР±С‹Рµ Р±Р»РѕРєРёСЂРѕРІРєРё)
+        {
+            urls: ['turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        }
     ],
     iceCandidatePoolSize: 10
 };
 
 window.prepareWebRTC = async (helper) => {
     dotNetHelper = helper;
-    // Сразу запрашиваем камеру при входе
     try {
+        // Р—Р°РїСЂР°С€РёРІР°РµРј РєР°РјРµСЂСѓ СЃСЂР°Р·Сѓ, С‡С‚РѕР±С‹ С‚СЂРµРєРё Р±С‹Р»Рё РіРѕС‚РѕРІС‹ Рє РјРѕРјРµРЅС‚Сѓ Р·РІРѕРЅРєР°
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        document.getElementById('localVideo').srcObject = localStream;
-        console.log("Камера готова");
-    } catch (e) { console.error("Ошибка камеры:", e); }
+        const localVideo = document.getElementById('localVideo');
+        if (localVideo) localVideo.srcObject = localStream;
+        console.log("Camera OK");
+    } catch (e) { console.error("Camera error:", e); }
 };
 
 function createPC(remoteId) {
+    // Р•СЃР»Рё СЃРѕРµРґРёРЅРµРЅРёРµ СЃ СЌС‚РёРј С‡РµР»РѕРІРµРєРѕРј СѓР¶Рµ РµСЃС‚СЊ вЂ” РІРѕР·РІСЂР°С‰Р°РµРј РµРіРѕ
     if (peerConnections[remoteId]) return peerConnections[remoteId];
 
+    console.log("Creating connection for:", remoteId);
     const pc = new RTCPeerConnection(config);
 
-    // Добавляем наши треки этому конкретному участнику
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    // Р”РѕР±Р°РІР»СЏРµРј РЅР°С€Рё РјРµРґРёР°-РґР°РЅРЅС‹Рµ РІ СЌС‚Рѕ СЃРѕРµРґРёРЅРµРЅРёРµ
+    if (localStream) {
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    }
 
+    // РљРѕРіРґР° Р±СЂР°СѓР·РµСЂ РЅР°С€РµР» РїСѓС‚СЊ (ICE-РєР°РЅРґРёРґР°С‚), С€Р»РµРј РµРіРѕ РєРѕРЅРєСЂРµС‚РЅРѕРјСѓ С‡РµР»РѕРІРµРєСѓ
     pc.onicecandidate = (e) => {
-        if (e.candidate) {
+        if (e.candidate && dotNetHelper) {
             dotNetHelper.invokeMethodAsync('SendIceCandidate', JSON.stringify(e.candidate), remoteId);
         }
     };
 
+    // РљРѕРіРґР° РїСЂРёС€Р»Рѕ РІРёРґРµРѕ РѕС‚ СѓРґР°Р»РµРЅРЅРѕРіРѕ СѓС‡Р°СЃС‚РЅРёРєР°
     pc.ontrack = (e) => {
-        console.log("ПОЛУЧЕН ПОТОК ОТ:", remoteId);
-        // Ищем свободный слот для видео (remote1, remote2, remote3)
+        console.log("Stream received from:", remoteId);
+        // РС‰РµРј СЃРІРѕР±РѕРґРЅС‹Р№ СЃР»РѕС‚ РёР»Рё СЃР»РѕС‚, РєРѕС‚РѕСЂС‹Р№ СѓР¶Рµ Р·Р°РєСЂРµРїР»РµРЅ Р·Р° СЌС‚РёРј ID
         for (let i = 1; i <= 3; i++) {
             let videoEl = document.getElementById(`remoteVideo${i}`);
-
-            // Если слот пустой ИЛИ в нем уже сидит этот же человек (бывает дубль треков)
             if (videoEl && (!videoEl.srcObject || videoEl.getAttribute("data-id") === remoteId)) {
-
-                // Фикс для Safari: если streams нет, создаем новый поток из пришедшего трека
-                if (e.streams && e.streams[0]) {
-                    videoEl.srcObject = e.streams[0];
-                } else {
-                    videoEl.srcObject = new MediaStream([e.track]);
-                }
-
+                // Р¤РёРєСЃ РґР»СЏ Safari Рё СЃС‚Р°СЂС‹С… Р±СЂР°СѓР·РµСЂРѕРІ
+                videoEl.srcObject = (e.streams && e.streams[0]) ? e.streams[0] : new MediaStream([e.track]);
                 videoEl.setAttribute("data-id", remoteId);
                 break;
             }
         }
     };
 
-
     peerConnections[remoteId] = pc;
     return pc;
 }
 
+// РЎРѕР·РґР°РЅРёРµ Р·РІРѕРЅРєР°
 window.createOffer = async (remoteId) => {
     const pc = createPC(remoteId);
     const offer = await pc.createOffer();
@@ -69,6 +73,7 @@ window.createOffer = async (remoteId) => {
     return JSON.stringify(offer);
 };
 
+// РџСЂРёРµРј Р·РІРѕРЅРєР°
 window.processOffer = async (offerJson, remoteId) => {
     const pc = createPC(remoteId);
     await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(offerJson)));
@@ -77,12 +82,30 @@ window.processOffer = async (offerJson, remoteId) => {
     return JSON.stringify(answer);
 };
 
+// Р—Р°РІРµСЂС€РµРЅРёРµ СЂСѓРєРѕРїРѕР¶Р°С‚РёСЏ
 window.processAnswer = async (ansJson, remoteId) => {
     const pc = peerConnections[remoteId];
     if (pc) await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(ansJson)));
 };
 
+// Р”РѕР±Р°РІР»РµРЅРёРµ СЃРµС‚РµРІС‹С… РјР°СЂС€СЂСѓС‚РѕРІ
 window.addIceCandidate = async (candJson, remoteId) => {
     const pc = peerConnections[remoteId];
-    if (pc) await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candJson)));
+    if (pc) {
+        try {
+            await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candJson)));
+        } catch (e) { console.warn("ICE candidate error", e); }
+    }
+};
+
+// РћС‡РёСЃС‚РєР° РїСЂРё РІС‹С…РѕРґРµ
+window.hangUp = () => {
+    for (let id in peerConnections) {
+        peerConnections[id].close();
+        delete peerConnections[id];
+    }
+    for (let i = 1; i <= 3; i++) {
+        let v = document.getElementById(`remoteVideo${i}`);
+        if (v) { v.srcObject = null; v.removeAttribute("data-id"); }
+    }
 };

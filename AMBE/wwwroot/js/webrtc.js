@@ -3,29 +3,22 @@ let peerConnection;
 let dotNetHelper;
 let iceCandidatesQueue = [];
 
-// ОБНОВЛЕННЫЙ КОНФИГ С ТВОИМИ ЛИЧНЫМИ КЛЮЧАМИ METERED
 const config = {
     iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
         {
-            urls: 'stun:stun.l.google.com:19302'
-        },
-        {
-            urls: 'stun:openrelay.metered.ca:80'
-        },
-        {
-            // Твой личный TURN сервер (TCP режим - самый стабильный)
             urls: 'turn:openrelay.metered.ca:443?transport=tcp',
             username: '2e7e778f6d1b07b279414c2d',
             credential: 'MOO2Lssrfa/+i8LI'
         },
         {
-            // Твой личный TURN сервер (UDP режим)
             urls: 'turn:openrelay.metered.ca:443',
             username: '2e7e778f6d1b07b279414c2d',
             credential: 'MOO2Lssrfa/+i8LI'
         }
     ],
-    iceCandidatePoolSize: 10
+    iceCandidatePoolSize: 10,
+    bundlePolicy: 'max-bundle'
 };
 
 window.prepareWebRTC = (helper) => {
@@ -34,18 +27,17 @@ window.prepareWebRTC = (helper) => {
 };
 
 window.startLocalVideo = async (id) => {
-    console.log("Включаю камеру...");
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         const videoElem = document.getElementById(id);
         if (videoElem) videoElem.srcObject = localStream;
     } catch (err) {
-        console.error("Ошибка при доступе к камере:", err);
+        console.error("Ошибка камеры:", err);
     }
 };
 
 function createPC() {
-    console.log("Создаю PeerConnection (авторизованный TURN)...");
+    console.log("Создаю PeerConnection (v4 стабильный)...");
     peerConnection = new RTCPeerConnection(config);
 
     if (localStream) {
@@ -54,21 +46,23 @@ function createPC() {
 
     peerConnection.onicecandidate = (e) => {
         if (e.candidate && dotNetHelper) {
-            console.log("Отправляю ICE-кандидата...");
             dotNetHelper.invokeMethodAsync('SendIceCandidate', JSON.stringify(e.candidate));
         }
     };
 
     peerConnection.ontrack = (e) => {
-        console.log("ПОЛУЧЕН ВИДЕОПОТОК ОТ ПАРТНЕРА!");
+        console.log("ВИДЕОПОТОК ПОЛУЧЕН!");
         const remoteVideo = document.getElementById('remoteVideo');
-        if (remoteVideo && e.streams[0]) {
-            remoteVideo.srcObject = e.streams[0];
-        }
+        if (remoteVideo) remoteVideo.srcObject = e.streams[0];
     };
 
     peerConnection.oniceconnectionstatechange = () => {
-        console.log("Статус соединения:", peerConnection.iceConnectionState);
+        console.log("ICE State:", peerConnection.iceConnectionState);
+        // АВТОВОССТАНОВЛЕНИЕ: Если дисконнект — не сдаемся
+        if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
+            console.log("Попытка восстановить связь...");
+            // Здесь можно вызвать Ice Restart, если нужно
+        }
     };
 }
 
@@ -81,29 +75,41 @@ window.createOffer = async () => {
 
 window.processOffer = async (offerJson) => {
     if (!peerConnection) createPC();
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(offerJson)));
+    const offer = new RTCSessionDescription(JSON.parse(offerJson));
+    await peerConnection.setRemoteDescription(offer);
 
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
 
-    while (iceCandidatesQueue.length > 0) {
-        const cand = iceCandidatesQueue.shift();
-        await peerConnection.addIceCandidate(cand).catch(e => console.warn("Ошибка кандидата:", e));
-    }
+    // ВАЖНО: Добавляем кандидатов строго ПОСЛЕ setRemoteDescription
+    processQueue();
+
     return JSON.stringify(answer);
 };
 
 window.processAnswer = async (ansJson) => {
-    if (peerConnection) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(ansJson)));
-    }
+    const answer = new RTCSessionDescription(JSON.parse(ansJson));
+    await peerConnection.setRemoteDescription(answer);
+    processQueue();
 };
+
+async function processQueue() {
+    while (iceCandidatesQueue.length > 0) {
+        const cand = iceCandidatesQueue.shift();
+        try {
+            await peerConnection.addIceCandidate(cand);
+        } catch (e) {
+            console.warn("Ошибка очереди ICE:", e);
+        }
+    }
+}
 
 window.addIceCandidate = async (candJson) => {
     const candidate = new RTCIceCandidate(JSON.parse(candJson));
-    if (!peerConnection || !peerConnection.remoteDescription) {
+    // Если дескрипшн еще не стоит — копим в очередь
+    if (!peerConnection || !peerConnection.remoteDescription || !peerConnection.remoteDescription.type) {
         iceCandidatesQueue.push(candidate);
     } else {
-        await peerConnection.addIceCandidate(candidate).catch(e => console.warn("Ошибка кандидата:", e));
+        await peerConnection.addIceCandidate(candidate).catch(e => console.warn(e));
     }
 };

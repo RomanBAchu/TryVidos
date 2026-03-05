@@ -3,12 +3,10 @@ let peerConnection;
 let dotNetHelper;
 let iceCandidatesQueue = [];
 
-// КОНФИГ ИЗ ЛИЧНОГО КАБИНЕТА METERED (ПОЛНЫЙ СПИСОК)
+// ТВОЙ КОНФИГ С ЛИЧНЫМИ КЛЮЧАМИ И ОПТИМИЗАЦИЕЙ ТРАФИКА
 const config = {
     iceServers: [
-        {
-            urls: "stun:stun.relay.metered.ca:80",
-        },
+        { urls: "stun:stun.relay.metered.ca:80" },
         {
             urls: "turn:global.relay.metered.ca:80",
             username: "2e7e778f6d1b07b279414c2d",
@@ -39,10 +37,21 @@ window.prepareWebRTC = (helper) => {
     console.log("!!! WebRTC мост установлен !!!");
 };
 
+// ФУНКЦИЯ ЭКОНОМИИ ТРАФИКА (320x240, 15 FPS)
 window.startLocalVideo = async (id) => {
-    console.log("Включаю камеру...");
+    console.log("Включаю ультра-экономный режим видео...");
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 320 },
+                height: { ideal: 240 },
+                frameRate: { max: 15 } // Экономим трафик в 2 раза
+            },
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true
+            }
+        });
         const videoElem = document.getElementById(id);
         if (videoElem) videoElem.srcObject = localStream;
     } catch (err) {
@@ -51,7 +60,7 @@ window.startLocalVideo = async (id) => {
 };
 
 function createPC() {
-    console.log("Создаю PeerConnection (GLOBAL RELAY)...");
+    console.log("Создаю PeerConnection (Экономный режим)...");
     peerConnection = new RTCPeerConnection(config);
 
     if (localStream) {
@@ -65,7 +74,7 @@ function createPC() {
     };
 
     peerConnection.ontrack = (e) => {
-        console.log("ВИДЕОПОТОК ПОЛУЧЕН!");
+        console.log("ВИДЕО ПОЛУЧЕНО!");
         const remoteVideo = document.getElementById('remoteVideo');
         if (remoteVideo) {
             remoteVideo.srcObject = e.streams[0];
@@ -74,9 +83,6 @@ function createPC() {
 
     peerConnection.oniceconnectionstatechange = () => {
         console.log("Статус ICE:", peerConnection.iceConnectionState);
-        if (peerConnection.iceConnectionState === 'disconnected') {
-            console.warn("Потеря связи, ожидание восстановления...");
-        }
     };
 }
 
@@ -93,7 +99,7 @@ window.processOffer = async (offerJson) => {
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
 
-    // Сразу обрабатываем накопившихся кандидатов
+    // Чистим очередь кандидатов после установки описания
     while (iceCandidatesQueue.length > 0) {
         const cand = iceCandidatesQueue.shift();
         await peerConnection.addIceCandidate(cand).catch(e => { });

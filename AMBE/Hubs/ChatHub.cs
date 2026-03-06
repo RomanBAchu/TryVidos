@@ -1,35 +1,30 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using System.Collections.Concurrent;
 
 namespace AMBE.Hubs
 {
     public class ChatHub : Hub
     {
-        // 1. Обычный чат
-        public async Task SendMessage(string user, string message)
-        {
-            await Clients.All.SendAsync("ReceiveMessage", user, message);
-        }
+        private static readonly ConcurrentDictionary<string, string> _users = new();
 
-        // 2. Улучшенный сигналинг для видео
-        public async Task SendSignal(string signal, string target)
-        {
-            if (target == "all")
-            {
-                // Рассылаем всем, кроме того, кто звонит
-                await Clients.Others.SendAsync("ReceiveSignal", signal, Context.ConnectionId);
-            }
-            else
-            {
-                // Шлем конкретному человеку (например, ответ на звонок)
-                await Clients.Client(target).SendAsync("ReceiveSignal", signal, Context.ConnectionId);
-            }
-        }
+        public async Task SendMessage(string user, string message) =>
+            await Clients.All.SendAsync("ReceiveMessage", user, message);
+
+        public async Task SendSignal(string signal, string target) =>
+            await Clients.Client(target).SendAsync("ReceiveSignal", signal, Context.ConnectionId);
 
         public override async Task OnConnectedAsync()
         {
-            // Сообщаем всем, что новый участник в сети
-            await Clients.Others.SendAsync("UserConnected", Context.ConnectionId);
+            await Clients.Caller.SendAsync("UserList", _users.Keys.ToList());
+            _users.TryAdd(Context.ConnectionId, "");
             await base.OnConnectedAsync();
+        }
+
+        public override async Task OnDisconnectedAsync(Exception? ex)
+        {
+            _users.TryRemove(Context.ConnectionId, out _);
+            await Clients.All.SendAsync("UserLeft", Context.ConnectionId);
+            await base.OnDisconnectedAsync(ex);
         }
     }
 }

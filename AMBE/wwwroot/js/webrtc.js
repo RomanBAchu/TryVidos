@@ -1,135 +1,85 @@
 let localStream;
-let peerConnection;
+let pcs = {};
 let dotNetHelper;
-let iceCandidatesQueue = [];
 
-const config = {
-    iceServers: [
-        { urls: "stun:stun.relay.metered.ca:80" },
-        {
-            urls: "turn:global.relay.metered.ca:80",
-            username: "2e7e778f6d1b07b279414c2d",
-            credential: "MOO2Lssrfa/+i8LI",
-        },
-        {
-            urls: "turn:global.relay.metered.ca:80?transport=tcp",
-            username: "2e7e778f6d1b07b279414c2d",
-            credential: "MOO2Lssrfa/+i8LI",
-        },
-        {
-            urls: "turn:global.relay.metered.ca:443",
-            username: "2e7e778f6d1b07b279414c2d",
-            credential: "MOO2Lssrfa/+i8LI",
-        },
-        {
-            urls: "turns:global.relay.metered.ca:443?transport=tcp",
-            username: "2e7e778f6d1b07b279414c2d",
-            credential: "MOO2Lssrfa/+i8LI",
-        }
-    ],
-    iceCandidatePoolSize: 10,
-    bundlePolicy: 'max-bundle'
+const config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+window.prepareWebRTC = (helper) => { dotNetHelper = helper; };
+
+window.spideyVibrate = (pattern) => {
+    if (navigator.vibrate) navigator.vibrate(pattern);
 };
 
-window.prepareWebRTC = (helper) => {
-    dotNetHelper = helper;
-    console.log("!!! WebRTC мост установлен !!!");
+window.scrollToEnd = (id) => {
+    const el = document.getElementById(id);
+    if (el) el.scrollTop = el.scrollHeight;
 };
 
 window.startLocalVideo = async (id) => {
-    console.log("Включаю ультра-экономный режим видео...");
     try {
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
+        if (!localStream) {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 320, height: 240, frameRate: 15 },
+                audio: true
+            });
         }
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { max: 15 } },
-            audio: { echoCancellation: true, noiseSuppression: true }
-        });
-        const videoElem = document.getElementById(id);
-        if (videoElem) videoElem.srcObject = localStream;
-    } catch (err) {
-        console.error("Ошибка камеры:", err);
-    }
+        document.getElementById(id).srcObject = localStream;
+        return true;
+    } catch (e) { return false; }
 };
 
-function createPC() {
-    console.log("Создаю PeerConnection...");
-    peerConnection = new RTCPeerConnection(config);
-
-    if (localStream) {
-        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-    }
-
-    peerConnection.onicecandidate = (e) => {
-        if (e.candidate && dotNetHelper && peerConnection && peerConnection.signalingState !== "closed") {
-            dotNetHelper.invokeMethodAsync('SendIceCandidate', JSON.stringify(e.candidate));
+function getOrCreatePC(remoteId) {
+    if (pcs[remoteId]) return pcs[remoteId];
+    const pc = new RTCPeerConnection(config);
+    pcs[remoteId] = pc;
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    pc.onicecandidate = (e) => {
+        if (e.candidate && dotNetHelper) {
+            dotNetHelper.invokeMethodAsync('SendSignalJS', JSON.stringify(e.candidate), remoteId).catch(() => { });
         }
     };
-
-    peerConnection.ontrack = (e) => {
-        console.log("ВИДЕО ПОЛУЧЕНО!");
-        const remoteVideo = document.getElementById('remoteVideo');
-        if (remoteVideo) remoteVideo.srcObject = e.streams[0];
+    pc.ontrack = (e) => {
+        let v = document.getElementById("video_" + remoteId);
+        if (!v) {
+            v = document.createElement("video");
+            v.id = "video_" + remoteId; v.autoplay = true; v.playsinline = true; v.className = "remote-v";
+            document.getElementById("remoteVideos").appendChild(v);
+        }
+        v.srcObject = e.streams;
     };
-
-    peerConnection.oniceconnectionstatechange = () => {
-        console.log("Статус ICE:", peerConnection?.iceConnectionState);
-    };
+    return pc;
 }
 
-window.createOffer = async () => {
-    if (!peerConnection) createPC();
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
+window.createOfferGroup = async (id) => {
+    const pc = getOrCreatePC(id);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
     return JSON.stringify(offer);
 };
 
-window.processOffer = async (offerJson) => {
-    if (!peerConnection) createPC();
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(offerJson)));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-
-    while (iceCandidatesQueue.length > 0) {
-        const cand = iceCandidatesQueue.shift();
-        await peerConnection.addIceCandidate(cand).catch(() => { });
-    }
-    return JSON.stringify(answer);
+window.processOfferGroup = async (json, id) => {
+    const pc = getOrCreatePC(id);
+    await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(json)));
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    return JSON.stringify(ans);
 };
 
-window.processAnswer = async (ansJson) => {
-    if (!peerConnection || peerConnection.signalingState === "closed") return;
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(ansJson)));
-    while (iceCandidatesQueue.length > 0) {
-        const cand = iceCandidatesQueue.shift();
-        await peerConnection.addIceCandidate(cand).catch(() => { });
-    }
+window.processAnswerGroup = async (json, id) => {
+    if (pcs[id]) await pcs[id].setRemoteDescription(new RTCSessionDescription(JSON.parse(json)));
 };
 
-window.addIceCandidate = async (candJson) => {
-    if (!peerConnection || peerConnection.signalingState === "closed" || !peerConnection.remoteDescription) {
-        iceCandidatesQueue.push(new RTCIceCandidate(JSON.parse(candJson)));
-    } else {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candJson))).catch(() => { });
-    }
+window.addIceCandidateGroup = async (json, id) => {
+    if (pcs[id]) await pcs[id].addIceCandidate(new RTCIceCandidate(JSON.parse(json)));
+};
+
+window.removeUser = (id) => {
+    if (pcs[id]) { pcs[id].close(); delete pcs[id]; document.getElementById("video_" + id)?.remove(); }
 };
 
 window.hangup = () => {
-    console.log("Завершение звонка и очистка ресурсов...");
-    iceCandidatesQueue = [];
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        localStream = null;
-    }
-    if (peerConnection) {
-        peerConnection.onicecandidate = null;
-        peerConnection.ontrack = null;
-        peerConnection.close();
-        peerConnection = null;
-    }
+    Object.keys(pcs).forEach(id => window.removeUser(id));
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     const lv = document.getElementById('localVideo');
-    const rv = document.getElementById('remoteVideo');
     if (lv) lv.srcObject = null;
-    if (rv) rv.srcObject = null;
 };

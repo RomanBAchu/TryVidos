@@ -10,11 +10,17 @@ namespace AMBE.Hubs
         public async Task SendMessage(string user, string message) =>
             await Clients.All.SendAsync("ReceiveMessage", user, message);
 
-        public async Task SendSignal(string signal, string target) =>
-            await Clients.Client(target).SendAsync("ReceiveSignal", signal, Context.ConnectionId);
+        public async Task SendSignal(string signal, string target)
+        {
+            if (target == "all")
+                await Clients.Others.SendAsync("ReceiveSignal", signal, Context.ConnectionId);
+            else
+                await Clients.Client(target).SendAsync("ReceiveSignal", signal, Context.ConnectionId);
+        }
 
         public override async Task OnConnectedAsync()
         {
+            // Новичок получает список всех, кто уже в сети
             await Clients.Caller.SendAsync("UserList", _users.Keys.ToList());
             _users.TryAdd(Context.ConnectionId, "");
             await base.OnConnectedAsync();

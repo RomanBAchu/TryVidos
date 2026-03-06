@@ -2,13 +2,26 @@ let localStream;
 let pcs = {};
 let dotNetHelper;
 
-const config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const config = {
+    iceServers: [
+        { urls: "stun:stun.relay.metered.ca:80" },
+        {
+            urls: "turn:global.relay.metered.ca:80",
+            username: "2e7e778f6d1b07b279414c2d",
+            credential: "MOO2Lssrfa/+i8LI",
+        },
+        {
+            urls: "turn:global.relay.metered.ca:443",
+            username: "2e7e778f6d1b07b279414c2d",
+            credential: "MOO2Lssrfa/+i8LI",
+        }
+    ],
+    iceCandidatePoolSize: 10
+};
 
 window.prepareWebRTC = (helper) => { dotNetHelper = helper; };
 
-window.spideyVibrate = (pattern) => {
-    if (navigator.vibrate) navigator.vibrate(pattern);
-};
+window.spideyVibrate = (pattern) => { if (navigator.vibrate) navigator.vibrate(pattern); };
 
 window.scrollToEnd = (id) => {
     const el = document.getElementById(id);
@@ -32,12 +45,15 @@ function getOrCreatePC(remoteId) {
     if (pcs[remoteId]) return pcs[remoteId];
     const pc = new RTCPeerConnection(config);
     pcs[remoteId] = pc;
+
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
     pc.onicecandidate = (e) => {
         if (e.candidate && dotNetHelper) {
             dotNetHelper.invokeMethodAsync('SendSignalJS', JSON.stringify(e.candidate), remoteId).catch(() => { });
         }
     };
+
     pc.ontrack = (e) => {
         let v = document.getElementById("video_" + remoteId);
         if (!v) {
@@ -45,14 +61,14 @@ function getOrCreatePC(remoteId) {
             v.id = "video_" + remoteId; v.autoplay = true; v.playsinline = true; v.className = "remote-v";
             document.getElementById("remoteVideos").appendChild(v);
         }
-        v.srcObject = e.streams;
+        v.srcObject = e.streams[0];
     };
     return pc;
 }
 
 window.createOfferGroup = async (id) => {
     const pc = getOrCreatePC(id);
-    const offer = await pc.createOffer();
+    const offer = await pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true });
     await pc.setLocalDescription(offer);
     return JSON.stringify(offer);
 };
@@ -70,7 +86,7 @@ window.processAnswerGroup = async (json, id) => {
 };
 
 window.addIceCandidateGroup = async (json, id) => {
-    if (pcs[id]) await pcs[id].addIceCandidate(new RTCIceCandidate(JSON.parse(json)));
+    if (pcs[id]) await pcs[id].addIceCandidate(new RTCIceCandidate(JSON.parse(json))).catch(() => { });
 };
 
 window.removeUser = (id) => {
@@ -80,6 +96,5 @@ window.removeUser = (id) => {
 window.hangup = () => {
     Object.keys(pcs).forEach(id => window.removeUser(id));
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    const lv = document.getElementById('localVideo');
-    if (lv) lv.srcObject = null;
+    document.getElementById('localVideo').srcObject = null;
 };

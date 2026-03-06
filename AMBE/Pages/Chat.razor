@@ -5,14 +5,14 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<div class="chat-container spidey-theme">
+<div class="chat-viewport spidey-theme">
+    @* ХЕДЕР *@
     <div class="hud-header d-flex justify-content-between p-2">
-        <span class="scan-line"></span>
-        <div class="hud-title">FNSM // NETWORK_V2.3</div>
-        <div class="hud-status">● ONLINE</div>
+        <div class="hud-title">FNSM // NET_NODE</div>
+        <div class="hud-status">● CONNECTED</div>
     </div>
 
-    @* Список сообщений с ID для авто-скролла *@
+    @* ЧАТ (ЗАНИМАЕТ ВСЁ СВОБОДНОЕ МЕСТО) *@
     <div id="msgList" class="messages-list">
         @foreach (var msg in messages) { 
             <div class="msg-bubble @(msg.User == "Система" ? "sys-msg" : "")">
@@ -22,30 +22,32 @@
         }
     </div>
 
-    @* Групповая видео-зона: Твое видео + Сетка остальных *@
-    <div class="video-hud">
-        <div class="video-grid-container">
-            <div class="local-wrap">
+    @* ВИДЕО-БЛОК (АДАПТИВНАЯ СЕТКА) *@
+    <div class="video-container-fluid @(_inCall ? "v-active" : "v-idle")">
+        <div class="video-grid-mesh">
+            <div class="video-item local">
                 <video id="localVideo" autoplay muted playsinline></video>
-                <div class="v-label">YOU</div>
+                <div class="v-tag">YOU</div>
             </div>
-            <div id="remoteVideos" class="remote-grid"></div>
+            <div id="remoteVideos" class="remote-mesh">
+                @* Сюда JS будет вставлять видео других участников *@
+            </div>
         </div>
     </div>
 
-    <div class="action-bar text-center p-3">
-        @if (!_inCall) {
-            <button class="btn btn-spidey main-btn" @onclick="JoinCall">📞 ВОЙТИ В ЭФИР</button>
-        } else {
-            <button class="btn btn-hangup main-btn" @onclick="LeaveCall">🚫 ПРЕРВАТЬ СВЯЗЬ</button>
-        }
-    </div>
-
-    <div class="input-area p-3">
-        <div class="input-wrapper d-flex gap-2 mb-3">
-            <input @bind="userName" class="spidey-input name-input" placeholder="ID" />
-            <input @bind="newMessage" @onkeyup="HandleKeyPress" class="spidey-input msg-input" placeholder="Сообщение..." />
-            <button class="btn-send" @onclick="Send">OK</button>
+    @* ПАНЕЛЬ УПРАВЛЕНИЯ *@
+    <div class="bottom-controls">
+        <div class="call-row px-3 pt-2">
+            @if (!_inCall) {
+                <button class="btn-spidey-action w-100" @onclick="JoinCall">📞 GO LIVE</button>
+            } else {
+                <button class="btn-spidey-hangup w-100" @onclick="LeaveCall">🚫 DISCONNECT</button>
+            }
+        </div>
+        <div class="input-row d-flex gap-2 p-3">
+            <input @bind="userName" class="spidey-input name-field" placeholder="ID" />
+            <input @bind="newMessage" @onkeyup="HandleKeyPress" class="spidey-input msg-field" placeholder="TYPE_MESSAGE..." />
+            <button class="btn-spidey-send" @onclick="Send">►</button>
         </div>
     </div>
 </div>
@@ -54,41 +56,82 @@
     :root {
         --spidey-red: #e62429;
         --spidey-blue: #0096FF;
-        --neon-glow: 0 0 15px rgba(230, 36, 41, 0.6);
+        --glow: 0 0 15px rgba(230, 36, 41, 0.5);
     }
-    .spidey-theme { background: radial-gradient(circle at center, #1a1a2e 0%, #050505 100%); color: white; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
-    
-    /* ЧАТ */
-    .messages-list { flex: 1; overflow-y: auto; padding: 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .msg-bubble { background: rgba(255, 255, 255, 0.05); border-left: 4px solid var(--spidey-red); padding: 8px 12px; margin-bottom: 10px; border-radius: 0 12px 12px 0; max-width: 90%; }
-    .msg-user { color: var(--spidey-red); font-size: 0.7rem; font-weight: bold; display: block; }
-    .msg-text { margin: 0; font-size: 0.9rem; word-break: break-word; }
-    .sys-msg { border-left-color: var(--spidey-blue); opacity: 0.8; }
 
-    /* ВИДЕО-СЕТКА (Mesh) */
-    .video-hud { background: rgba(0,0,0,0.5); padding: 10px; border-top: 1px solid var(--spidey-red); }
-    .video-grid-container { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; }
-    
-    .local-wrap { position: relative; }
-    #localVideo { width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--spidey-red); box-shadow: var(--neon-glow); object-fit: cover; }
-    .v-label { position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); background: var(--spidey-red); font-size: 0.6rem; padding: 1px 6px; border-radius: 10px; }
+    /* ОСНОВНОЙ КОНТЕЙНЕР НА ВЕСЬ ЭКРАН */
+    .chat-viewport {
+        display: flex;
+        flex-direction: column;
+        height: 100dvh; /* Динамический вьюпорт для мобил */
+        background: radial-gradient(circle at center, #1a1a2e 0%, #050505 100%);
+        color: white;
+        overflow: hidden;
+    }
 
-    .remote-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 250px; }
-    .remote-v { width: 100px; height: 100px; border-radius: 10px; border: 1px solid var(--spidey-blue); object-fit: cover; background: #000; }
+    /* ЧАТ С АВТО-РАСШИРЕНИЕМ */
+    .messages-list {
+        flex: 1; /* Занимает всё свободное место */
+        overflow-y: auto;
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
 
-    /* КНОПКИ */
-    .main-btn { font-size: 1rem; padding: 12px 30px !important; border-radius: 30px !important; font-weight: 900; letter-spacing: 1px; }
-    .btn-spidey { background: var(--spidey-red); border: none; color: white; box-shadow: var(--neon-glow); }
-    .btn-hangup { background: #222; border: 2px solid var(--spidey-red); color: white; }
-    
-    .input-area { background: #000; padding-bottom: 30px !important; }
-    .spidey-input { background: rgba(255,255,255,0.1); border: 1px solid var(--spidey-red); color: white; padding: 10px; border-radius: 10px; font-size: 0.9rem; }
-    .name-input { width: 70px; text-align: center; font-weight: bold; color: var(--spidey-red); }
-    .msg-input { flex: 1; }
-    .btn-send { background: var(--spidey-blue); border: none; color: white; padding: 0 20px; border-radius: 10px; font-weight: bold; box-shadow: 0 0 10px rgba(0, 150, 255, 0.4); }
+    .msg-bubble {
+        background: rgba(255, 255, 255, 0.07);
+        border-left: 3px solid var(--spidey-red);
+        padding: 8px 12px;
+        border-radius: 0 15px 15px 0;
+        width: fit-content;
+        max-width: 85%;
+        backdrop-filter: blur(5px);
+    }
+    .msg-user { color: var(--spidey-red); font-size: 0.7rem; font-weight: bold; }
+    .msg-text { margin: 0; font-size: 0.9rem; }
+    .sys-msg { border-left-color: var(--spidey-blue); opacity: 0.7; }
 
-    .hud-header { background: rgba(230, 36, 41, 0.15); border-bottom: 1px solid var(--spidey-red); font-size: 0.7rem; }
-    @@keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+    /* ВИДЕО-БЛОК (MESH GRID) */
+    .video-container-fluid {
+        background: rgba(0,0,0,0.6);
+        border-top: 1px solid var(--spidey-red);
+        transition: all 0.3s ease;
+    }
+    .v-idle { height: 0; opacity: 0; padding: 0; overflow: hidden; }
+    .v-active { min-height: 120px; padding: 10px; opacity: 1; }
+
+    .video-grid-mesh {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .video-item video {
+        width: 80px; height: 80px; border-radius: 50%;
+        border: 2px solid var(--spidey-red); box-shadow: var(--glow);
+        object-fit: cover;
+    }
+    .local { position: relative; }
+    .v-tag { position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); background: var(--spidey-red); font-size: 0.6rem; padding: 2px 6px; border-radius: 10px; }
+
+    /* СЕТКА ДЛЯ ОСТАЛЬНЫХ */
+    .remote-mesh { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    /* Стиль для видео, которые добавляет JS */
+    .remote-v { width: 90px; height: 90px; border-radius: 12px; border: 1px solid var(--spidey-blue); object-fit: cover; background: #000; }
+
+    /* УПРАВЛЕНИЕ */
+    .bottom-controls { background: #000; padding-bottom: env(safe-area-inset-bottom); }
+    .btn-spidey-action { background: var(--spidey-red); border: none; color: white; padding: 12px; border-radius: 25px; font-weight: bold; box-shadow: var(--glow); }
+    .btn-spidey-hangup { background: transparent; border: 2px solid var(--spidey-red); color: white; padding: 10px; border-radius: 25px; }
+
+    .spidey-input { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 10px; padding: 10px; }
+    .name-field { width: 70px; text-align: center; color: var(--spidey-red); font-weight: bold; }
+    .msg-field { flex: 1; }
+    .btn-spidey-send { background: var(--spidey-blue); border: none; color: white; width: 45px; border-radius: 10px; font-size: 1.2rem; }
+
+    .hud-header { background: rgba(230, 36, 41, 0.2); border-bottom: 1px solid var(--spidey-red); font-size: 0.7rem; letter-spacing: 2px; }
 </style>
 
 @code {
@@ -102,8 +145,7 @@
 
         hub.On<string, string>("ReceiveMessage", (u, t) => InvokeAsync(async () => {
             messages.Add(new Message { User = u, Text = t });
-            // Вибрация: если сообщение от другого человека
-            if (u != userName) {
+            if (u != userName && u != "Система") {
                 await JS.InvokeVoidAsync("spideyVibrate", new int[] { 100, 50, 100 });
             }
             StateHasChanged();
@@ -148,7 +190,7 @@
         if (ok && hub != null) {
             _inCall = true;
             await JS.InvokeVoidAsync("spideyVibrate", new int[] { 50, 30, 50 });
-            await hub.SendAsync("SendMessage", "Система", userName + " зашел в эфир.");
+            await hub.SendAsync("SendMessage", "Система", userName + " В СЕТИ");
             await hub.SendAsync("SendSignal", "requestList", "all");
         }
     }
@@ -156,7 +198,7 @@
     private async Task LeaveCall() {
         _inCall = false;
         await JS.InvokeVoidAsync("hangup");
-        if (hub != null) await hub.SendAsync("SendMessage", "Система", userName + " отключился.");
+        if (hub != null) await hub.SendAsync("SendMessage", "Система", userName + " ВЫШЕЛ");
     }
 
     private async Task Send() {
@@ -166,10 +208,7 @@
         }
     }
 
-    [JSInvokable] public async Task SendSignalJS(string sig, string tid) {
-        if (hub != null) await hub.SendAsync("SendSignal", sig, tid);
-    }
-
+    [JSInvokable] public async Task SendSignalJS(string s, string t) { if (hub != null) await hub.SendAsync("SendSignal", s, t); }
     private async Task HandleKeyPress(KeyboardEventArgs e) { if (e.Key == "Enter") await Send(); }
     public async ValueTask DisposeAsync() { if (hub != null) await hub.DisposeAsync(); }
     public class Message { public string User { get; set; } = ""; public string Text { get; set; } = ""; }

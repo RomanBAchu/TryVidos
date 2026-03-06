@@ -5,133 +5,103 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<div class="chat-viewport spidey-theme">
-    @* ХЕДЕР *@
-    <div class="hud-header d-flex justify-content-between p-2">
-        <div class="hud-title">FNSM // NET_NODE</div>
-        <div class="hud-status">● CONNECTED</div>
+<div class="spidey-viewport">
+    @* ВЕРХНИЙ HUD (ВИДЕО) *@
+    <div class="video-hub @(_inCall ? "expanded" : "collapsed")">
+        <div class="hud-scanner"></div>
+        <div class="video-mesh">
+            <div class="v-slot local">
+                <video id="localVideo" autoplay muted playsinline></video>
+                <div class="v-badge">YOU</div>
+            </div>
+            <div id="remoteVideos" class="remote-mesh-container">
+                @* Сюда JS вставляет крупные плитки *@
+            </div>
+        </div>
+        @if (_inCall) {
+            <div class="v-footer">● FNSM_SECURE_LINK // ACTIVE</div>
+        }
     </div>
 
-    @* ЧАТ (ЗАНИМАЕТ ВСЁ СВОБОДНОЕ МЕСТО) *@
-    <div id="msgList" class="messages-list">
+    @* СРЕДНИЙ БЛОК (ЧАТ) *@
+    <div id="msgList" class="spidey-chat-area">
         @foreach (var msg in messages) { 
-            <div class="msg-bubble @(msg.User == "Система" ? "sys-msg" : "")">
-                <span class="msg-user">@msg.User.ToUpper()</span>
-                <p class="msg-text">@msg.Text</p>
+            <div class="spidey-msg @(msg.User == "Система" ? "sys" : "")">
+                <span class="u">@msg.User.ToUpper()</span>
+                <span class="t">@msg.Text</span>
             </div> 
         }
     </div>
 
-    @* ВИДЕО-БЛОК (АДАПТИВНАЯ СЕТКА) *@
-    <div class="video-container-fluid @(_inCall ? "v-active" : "v-idle")">
-        <div class="video-grid-mesh">
-            <div class="video-item local">
-                <video id="localVideo" autoplay muted playsinline></video>
-                <div class="v-tag">YOU</div>
-            </div>
-            <div id="remoteVideos" class="remote-mesh">
-                @* Сюда JS будет вставлять видео других участников *@
-            </div>
+    @* НИЖНИЙ БЛОК (УПРАВЛЕНИЕ) *@
+    <div class="spidey-nav">
+        <div class="input-container d-flex gap-2">
+            <input @bind="userName" class="s-input id-field" />
+            <input @bind="newMessage" @onkeyup="HandleKeyPress" class="s-input text-field" placeholder="DATA_INPUT..." />
+            <button class="s-btn-send" @onclick="Send">►</button>
         </div>
-    </div>
-
-    @* ПАНЕЛЬ УПРАВЛЕНИЯ *@
-    <div class="bottom-controls">
-        <div class="call-row px-3 pt-2">
+        <div class="call-action mt-2">
             @if (!_inCall) {
-                <button class="btn-spidey-action w-100" @onclick="JoinCall">📞 GO LIVE</button>
+                <button class="s-btn-call" @onclick="JoinCall">📞 СТАРТ ТРАНСЛЯЦИИ</button>
             } else {
-                <button class="btn-spidey-hangup w-100" @onclick="LeaveCall">🚫 DISCONNECT</button>
+                <button class="s-btn-hangup" @onclick="LeaveCall">🚫 ОБОРВАТЬ СВЯЗЬ</button>
             }
-        </div>
-        <div class="input-row d-flex gap-2 p-3">
-            <input @bind="userName" class="spidey-input name-field" placeholder="ID" />
-            <input @bind="newMessage" @onkeyup="HandleKeyPress" class="spidey-input msg-field" placeholder="TYPE_MESSAGE..." />
-            <button class="btn-spidey-send" @onclick="Send">►</button>
         </div>
     </div>
 </div>
 
 <style>
-    :root {
-        --spidey-red: #e62429;
-        --spidey-blue: #0096FF;
-        --glow: 0 0 15px rgba(230, 36, 41, 0.5);
+    :root { --red: #e62429; --blue: #0096FF; --glow: 0 0 15px rgba(230,36,41,0.5); }
+    
+    .spidey-viewport { 
+        display: flex; flex-direction: column; height: 100dvh; 
+        background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden;
     }
 
-    /* ОСНОВНОЙ КОНТЕЙНЕР НА ВЕСЬ ЭКРАН */
-    .chat-viewport {
-        display: flex;
-        flex-direction: column;
-        height: 100dvh; /* Динамический вьюпорт для мобил */
-        background: radial-gradient(circle at center, #1a1a2e 0%, #050505 100%);
-        color: white;
-        overflow: hidden;
+    /* ВИДЕО - ТЕПЕРЬ ГЛАВНОЕ */
+    .video-hub { 
+        background: radial-gradient(circle, #222 0%, #000 100%);
+        border-bottom: 2px solid var(--red);
+        transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative; overflow: hidden;
+    }
+    .collapsed { height: 60px; }
+    .expanded { height: 55%; } /* Занимает больше половины экрана */
+
+    .video-mesh { 
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); 
+        gap: 10px; padding: 15px; height: 100%; align-content: center;
     }
 
-    /* ЧАТ С АВТО-РАСШИРЕНИЕМ */
-    .messages-list {
-        flex: 1; /* Занимает всё свободное место */
-        overflow-y: auto;
-        padding: 15px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+    .v-slot video { 
+        width: 100%; height: 100%; max-height: 180px; object-fit: cover;
+        border: 1px solid var(--red); border-radius: 12px; box-shadow: var(--glow);
     }
+    .local { position: relative; max-width: 160px; margin: 0 auto; }
+    .v-badge { position: absolute; top: 10px; left: 10px; background: var(--red); font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
 
-    .msg-bubble {
-        background: rgba(255, 255, 255, 0.07);
-        border-left: 3px solid var(--spidey-red);
-        padding: 8px 12px;
-        border-radius: 0 15px 15px 0;
-        width: fit-content;
-        max-width: 85%;
-        backdrop-filter: blur(5px);
+    /* ЧАТ - ТЕПЕРЬ ПОД ВИДЕО */
+    .spidey-chat-area { 
+        flex: 1; overflow-y: auto; padding: 15px; 
+        background: rgba(255,255,255,0.03); display: flex; flex-direction: column; gap: 8px;
     }
-    .msg-user { color: var(--spidey-red); font-size: 0.7rem; font-weight: bold; }
-    .msg-text { margin: 0; font-size: 0.9rem; }
-    .sys-msg { border-left-color: var(--spidey-blue); opacity: 0.7; }
+    .spidey-msg { background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; border-left: 2px solid var(--red); }
+    .spidey-msg .u { color: var(--red); font-size: 0.65rem; font-weight: bold; display: block; }
+    .spidey-msg .t { font-size: 0.85rem; }
+    .sys { border-left-color: var(--blue); opacity: 0.6; }
 
-    /* ВИДЕО-БЛОК (MESH GRID) */
-    .video-container-fluid {
-        background: rgba(0,0,0,0.6);
-        border-top: 1px solid var(--spidey-red);
-        transition: all 0.3s ease;
-    }
-    .v-idle { height: 0; opacity: 0; padding: 0; overflow: hidden; }
-    .v-active { min-height: 120px; padding: 10px; opacity: 1; }
+    /* УПРАВЛЕНИЕ - ВСЕГДА ВНИЗУ */
+    .spidey-nav { background: #111; padding: 15px; border-top: 1px solid #333; padding-bottom: calc(15px + env(safe-area-inset-bottom)); }
+    .s-input { background: #222; border: 1px solid #444; color: #fff; border-radius: 8px; padding: 10px; font-size: 0.9rem; }
+    .id-field { width: 70px; text-align: center; color: var(--red); font-weight: bold; }
+    .text-field { flex: 1; }
+    .s-btn-send { background: var(--blue); border: none; color: #fff; width: 50px; border-radius: 8px; }
+    
+    .s-btn-call { background: var(--red); border: none; color: #fff; width: 100%; padding: 12px; border-radius: 25px; font-weight: bold; box-shadow: var(--glow); margin-top: 5px; }
+    .s-btn-hangup { background: transparent; border: 2px solid var(--red); color: #fff; width: 100%; padding: 10px; border-radius: 25px; margin-top: 5px; }
 
-    .video-grid-mesh {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .video-item video {
-        width: 80px; height: 80px; border-radius: 50%;
-        border: 2px solid var(--spidey-red); box-shadow: var(--glow);
-        object-fit: cover;
-    }
-    .local { position: relative; }
-    .v-tag { position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); background: var(--spidey-red); font-size: 0.6rem; padding: 2px 6px; border-radius: 10px; }
-
-    /* СЕТКА ДЛЯ ОСТАЛЬНЫХ */
-    .remote-mesh { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-    /* Стиль для видео, которые добавляет JS */
-    .remote-v { width: 90px; height: 90px; border-radius: 12px; border: 1px solid var(--spidey-blue); object-fit: cover; background: #000; }
-
-    /* УПРАВЛЕНИЕ */
-    .bottom-controls { background: #000; padding-bottom: env(safe-area-inset-bottom); }
-    .btn-spidey-action { background: var(--spidey-red); border: none; color: white; padding: 12px; border-radius: 25px; font-weight: bold; box-shadow: var(--glow); }
-    .btn-spidey-hangup { background: transparent; border: 2px solid var(--spidey-red); color: white; padding: 10px; border-radius: 25px; }
-
-    .spidey-input { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 10px; padding: 10px; }
-    .name-field { width: 70px; text-align: center; color: var(--spidey-red); font-weight: bold; }
-    .msg-field { flex: 1; }
-    .btn-spidey-send { background: var(--spidey-blue); border: none; color: white; width: 45px; border-radius: 10px; font-size: 1.2rem; }
-
-    .hud-header { background: rgba(230, 36, 41, 0.2); border-bottom: 1px solid var(--spidey-red); font-size: 0.7rem; letter-spacing: 2px; }
+    .hud-scanner { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: rgba(255,255,255,0.1); animation: scan 3s infinite linear; }
+    @@keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
 </style>
 
 @code {
@@ -190,7 +160,7 @@
         if (ok && hub != null) {
             _inCall = true;
             await JS.InvokeVoidAsync("spideyVibrate", new int[] { 50, 30, 50 });
-            await hub.SendAsync("SendMessage", "Система", userName + " В СЕТИ");
+            await hub.SendAsync("SendMessage", "Система", userName + " В ЭФИРЕ");
             await hub.SendAsync("SendSignal", "requestList", "all");
         }
     }

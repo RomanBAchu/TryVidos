@@ -1,73 +1,11 @@
 /* spider-man-ps5.css */
 :root {
-    
-    --spidey-black: #121212;
+    --spidey-red: #e62429;
     --spidey-glass: rgba(18, 18, 18, 0.85);
-    --spidey-neon: #ff3c3c;
     --text-white: #ffffff;
 }
 
-body, html {
-    margin: 0;
-    padding: 0;
-    background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
-    color: var(--text-white);
-    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    height: 100%;
-    overflow: hidden;
-}
-
-/* Контейнер чата в стиле FNSM App */
-.chat-container {
-    max-width: 100%;
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    background: var(--spidey-glass);
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 0 30px rgba(230, 36, 41, 0.2);
-}
-
-/* Список сообщений */
-.messages-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-    /* Пузыри сообщений */
-    .messages-list div {
-        background: rgba(255, 255, 255, 0.05);
-        border-left: 3px solid var(--spidey-red);
-        padding: 10px 15px;
-        border-radius: 4px 15px 15px 4px;
-        max-width: 85%;
-        animation: slideIn 0.3s ease-out;
-    }
-
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateX(-10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-/* Видео-сетка в стиле HUD */
-.video-section {
-    padding: 15px;
-    background: rgba(0, 0, 0, 0.5);
-    border-bottom: 1px solid var(--spidey-red);
-}
-
+/* ТВОЙ КРУЖОК (ВОЗВРАЩЕНО) */
 #localVideo {
     width: 100px;
     height: 100px;
@@ -77,55 +15,42 @@ body, html {
     box-shadow: 0 0 15px var(--spidey-red);
 }
 
-.remote-v {
-    
-    object-fit: cover;
-    border-radius: 12px;
+/* ВИДЕО СОБЕСЕДНИКА - МАКСИМАЛЬНО БОЛЬШОЕ */
+.remote-v-container {
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: transform 0.2s;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 15px;
 }
 
-/* Кнопки и ввод */
-.btn-success {
-    background-color: var(--spidey-red) !important;
+    .remote-v-container video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+/* Кнопка ОТПРАВИТЬ */
+.s-btn-send {
+    background-color: #0096FF !important;
     border: none !important;
+    color: white;
     font-weight: bold;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    box-shadow: 0 0 15px var(--spidey-red);
+    padding: 0 15px;
+    border-radius: 8px;
 }
 
-.btn-danger {
-    background-color: #333 !important;
-    border: 1px solid var(--spidey-red) !important;
-}
-
-.input-group {
-    background: #000;
-    padding: 15px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-    .input-group input {
-        background: rgba(255, 255, 255, 0.08) !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        color: white !important;
-        border-radius: 25px !important;
-    }
-
-/* Мобильная адаптация */
-@media (max-width: 600px) {
-    .video-section {
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .remote-v {
-        width: 95%;
-        max-height: 40vh;
-    }
-
-    .input-group {
-        padding-bottom: 30px; /* Для жестов iPhone */
-    }
+/* Кнопка Камеры */
+.cam-btn {
+    background: var(--spidey-red);
+    border: none;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    margin-bottom: 5px;
 }

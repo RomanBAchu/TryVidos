@@ -3,13 +3,12 @@ using AMBE.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Добавляем сервисы
+// 1. Регистрация сервисов
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddSignalR();
 
-// Добавляем CORS (пригодится для WebRTC и внешних подключений)
 builder.Services.AddCors(options => {
     options.AddDefaultPolicy(policy => {
         policy.AllowAnyHeader().AllowAnyMethod().SetIsOriginAllowed(_ => true).AllowCredentials();
@@ -18,7 +17,7 @@ builder.Services.AddCors(options => {
 
 var app = builder.Build();
 
-// 2. Настройка конвейера (ПОРЯДОК ВАЖЕН!)
+// 2. Настройка Middleware (ПОРЯДОК ВАЖЕН)
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
@@ -26,18 +25,16 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// Сначала разрешаем отдавать CSS/JS файлы из wwwroot
-app.UseStaticFiles();
-
-// Затем включаем маршрутизацию и защиту
-app.UseRouting();
+app.UseStaticFiles(); // Позволяет браузеру видеть webrtc.js
+app.UseRouting();     // Включаем маршрутизацию перед антифорджери
 app.UseAntiforgery();
 app.UseCors();
 
 // 3. Регистрация эндпоинтов
 app.MapHub<ChatHub>("/chathub");
 
+// ГЛАВНОЕ ИСПРАВЛЕНИЕ:
+// Регистрируем App как основной компонент и разрешаем ему обрабатывать все запросы
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

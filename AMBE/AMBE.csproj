@@ -9,6 +9,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <Compile Remove="wwwroot\css\bootstrap\**" />
+	  <Content Remove="wwwroot\css\bootstrap\**" />
+	  <EmbeddedResource Remove="wwwroot\css\bootstrap\**" />
+	  <None Remove="wwwroot\css\bootstrap\**" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <Content Remove="Pages\_Host.cshtml" />
 	</ItemGroup>
 
@@ -25,7 +32,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Folder Include="wwwroot\css\bootstrap\" />
+	  <Folder Include="Shared\" />
 	</ItemGroup>
 
 </Project>

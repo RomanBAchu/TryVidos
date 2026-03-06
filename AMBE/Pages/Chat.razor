@@ -47,36 +47,41 @@
             .Build();
 
         hub.On<string, string>("ReceiveMessage", (u, t) => {
-            messages.Add(new Message { User = u, Text = t });
-            InvokeAsync(StateHasChanged);
+            InvokeAsync(() => {
+                messages.Add(new Message { User = u, Text = t });
+                StateHasChanged();
+            });
         });
 
         hub.On<string, string>("ReceiveSignal", async (signal, senderId) => {
-            try {
-                if (signal.Contains("candidate")) {
-                    await JS.InvokeVoidAsync("addIceCandidate", signal);
-                }
-                else if (signal.Contains("offer")) {
-                    if (!_videoActive) {
-                        await JS.InvokeVoidAsync("startLocalVideo", "localVideo");
-                        _videoActive = true;
-                        StateHasChanged();
-                        await Task.Delay(800); 
+            // Принудительно используем Dispatcher для потоков SignalR
+            await InvokeAsync(async () => {
+                try {
+                    if (signal.Contains("candidate")) {
+                        await JS.InvokeVoidAsync("addIceCandidate", signal);
                     }
-                    var answer = await JS.InvokeAsync<string>("processOffer", signal);
-                    await hub.SendAsync("SendSignal", answer, senderId);
+                    else if (signal.Contains("offer")) {
+                        if (!_videoActive) {
+                            await JS.InvokeVoidAsync("startLocalVideo", "localVideo");
+                            _videoActive = true;
+                            StateHasChanged();
+                            await Task.Delay(1000); 
+                        }
+                        var answer = await JS.InvokeAsync<string>("processOffer", signal);
+                        await hub.SendAsync("SendSignal", answer, senderId);
+                    }
+                    else if (signal.Contains("answer")) {
+                        await JS.InvokeVoidAsync("processAnswer", signal);
+                    }
+                    else if (signal == "hangup") {
+                        await EndCallInternal();
+                    }
+                } catch (Exception ex) {
+                    Console.WriteLine("Signal Error: " + ex.Message);
+                    messages.Add(new Message { User = "Система", Text = "Ошибка сигнала: " + ex.Message });
+                    StateHasChanged();
                 }
-                else if (signal.Contains("answer")) {
-                    await JS.InvokeVoidAsync("processAnswer", signal);
-                }
-                else if (signal == "hangup") {
-                    await EndCallInternal();
-                }
-            } catch (Exception ex) {
-                Console.WriteLine("Signal Error: " + ex.Message);
-                messages.Add(new Message { User = "Система", Text = "Ошибка сигнала: " + ex.Message });
-                await InvokeAsync(StateHasChanged);
-            }
+            });
         });
 
         await hub.StartAsync();
@@ -89,7 +94,7 @@
                 await JS.InvokeVoidAsync("startLocalVideo", "localVideo");
                 _videoActive = true;
                 StateHasChanged();
-                await Task.Delay(1000); 
+                await Task.Delay(1200); 
             }
             var offer = await JS.InvokeAsync<string>("createOffer");
             if (hub != null) await hub.SendAsync("SendSignal", offer, "all");
@@ -97,6 +102,7 @@
             Console.WriteLine("StartCall Error: " + ex.Message);
             messages.Add(new Message { User = "Система", Text = "Ошибка связи: " + ex.Message });
             _videoActive = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 

@@ -1,4 +1,5 @@
-﻿@using Microsoft.AspNetCore.SignalR.Client
+﻿@namespace AMBE.Components
+@using Microsoft.AspNetCore.SignalR.Client
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Web
 @inject NavigationManager Nav
@@ -7,11 +8,9 @@
 
 <div class="spidey-viewport">
     @* ВЕРХНИЙ HUD (ВИДЕО) *@
-    @* Измени % в .expanded ниже в стилях, чтобы двигать красную полосу *@
     <div class="video-hub @(_inCall ? "expanded" : "collapsed")">
         <div class="hud-scanner"></div>
         
-        @* ТВОЕ ВИДЕО (КРУЖОК СЛЕВА) *@
         <div class="v-slot local" style="display: @(_inCall ? "block" : "none")">
             <video id="localVideo" autoplay muted playsinline></video>
             <div class="v-badge">Ты</div>
@@ -20,10 +19,7 @@
             </button>
         </div>
 
-        @* ВИДЕО ДРУГИХ (БОЛЬШИЕ ОКНА) *@
-        <div id="remoteVideos" class="remote-mesh-container">
-            @* Сюда JS вставляет крупные плитки собеседников *@
-        </div>
+        <div id="remoteVideos" class="remote-mesh-container"></div>
 
         @if (_inCall) {
             <div class="v-footer">● ЗАЩИЩЕННЫЙ_КАНАЛ_FNSM // АКТИВЕН</div>
@@ -40,12 +36,18 @@
         }
     </div>
 
-    @* НИЖНИЙ БЛОК (УПРАВЛЕНИЕ) *@
+    @* НИЖНИЙ БЛОК (УПРАВЛЕНИЕ) - ОБНОВЛЕН ПОД МОБИЛКИ *@
     <div class="spidey-nav">
-        <div class="input-container d-flex gap-2">
-            <input @bind="userName" class="s-input id-field" />
-            <input @bind="newMessage" @onkeyup="HandleKeyPress" class="s-input text-field" placeholder="Сообщение..." />
-            <button class="s-btn-send" @onclick="Send">ОТПРАВИТЬ</button>
+        <div class="mobile-input-stack">
+            <div class="fields-group">
+                <input @bind="userName" class="s-input id-field" placeholder="Позывной..." />
+                <input @bind="newMessage" @onkeyup="HandleKeyPress" class="s-input text-field" placeholder="Сообщение..." />
+            </div>
+            <button class="s-btn-send-round" @onclick="Send">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                </svg>
+            </button>
         </div>
         <div class="call-action mt-2">
             @if (!_inCall) {
@@ -57,138 +59,105 @@
     </div>
 </div>
 
-<style>
-    :root { --red: #e62429; --blue: #0096FF; --glow: 0 0 15px rgba(230,36,41,0.5); }
-    
-    .spidey-viewport { display: flex; flex-direction: column; height: 100dvh; background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
-
-    .video-hub { background: radial-gradient(circle, #222 0%, #000 100%); border-bottom: 2px solid var(--red); transition: height 0.5s ease; position: relative; overflow: hidden; }
-    .collapsed { height: 60px; }
-    
-    /* РЕГУЛИРОВКА ВЫСОТЫ ВИДЕО: уменьши до 30%, если хочешь еще больше места для чата */
-    .expanded { height: 60%; } 
-
-    .local { position: absolute; bottom: 15px; left: 15px; width: 90px; height: 90px; z-index: 100; }
-    .local video { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; border: 2px solid var(--red); box-shadow: var(--glow); }
-    .v-badge { position: absolute; top: -5px; left: 50%; transform: translateX(-50%); background: var(--red); font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: bold; }
-    
-    .cam-toggle-btn { position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); border: 1px solid var(--red); color: #fff; font-size: 9px; padding: 2px 5px; border-radius: 4px; white-space: nowrap; }
-    .cam-toggle-btn.off { background: var(--red); }
-
-    .remote-mesh-container { display: flex; flex-wrap: wrap; gap: 5px; padding: 10px; height: 100%; width: 100%; align-items: center; justify-content: center; }
-
-    /* ЧАТ - УПЛОТНЕННЫЕ ОТСТУПЫ */
-    .spidey-chat-area { 
-        flex: 1; overflow-y: auto; padding: 10px; 
-        background: rgba(255,255,255,0.03); display: flex; flex-direction: column; 
-        gap: 4px; /* Расстояние МЕЖДУ сообщениями */
-    }
-
-    .spidey-msg { 
-        background: rgba(255, 255, 255, 0.05); 
-        padding: 4px 12px; /* Уплотненный текст внутри */
-        border-radius: 20px; /* Твои скругления */
-        border-left: 2px solid var(--red); 
-    }
-
-    .spidey-msg .u { color: var(--red); font-size: 10px; font-weight: bold; display: block; margin-bottom: -1px; }
-    .spidey-msg .t { font-size: 0.85rem; line-height: 1.2; }
-    .sys { border-left-color: var(--blue); opacity: 0.6; }
-
-    .spidey-nav { background: #111; padding: 10px 15px; border-top: 1px solid #333; }
-    .s-input { background: #222; border: 1px solid #444; color: #fff; border-radius: 8px; padding: 8px 10px; }
-    .id-field { width: 80px; text-align: center; color: var(--red); font-weight: bold; }
-    .text-field { flex: 1; }
-    
-    .s-btn-send { background: var(--blue); border: none; color: #fff; padding: 8px 15px; border-radius: 8px; font-weight: bold; font-size: 12px; }
-    
-    .s-btn-call { background: var(--red); border: none; color: #fff; width: 100%; padding: 12px; border-radius: 25px; font-weight: bold; box-shadow: var(--glow); }
-    .s-btn-hangup { background: transparent; border: 2px solid var(--red); color: #fff; width: 100%; padding: 10px; border-radius: 25px; }
-
-    .v-footer { text-align: center; font-size: 10px; color: var(--red); padding-bottom: 5px; }
-    .hud-scanner { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: rgba(255,255,255,0.1); animation: scan 3s infinite linear; pointer-events: none; }
-    @@keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
-</style>
-
 @code {
     private HubConnection? hub;
     private List<Message> messages = new();
     private string userName = "Чудило", newMessage = "";
-    private bool _inCall = false;
-    private bool _isCamOn = true;
+    private bool _inCall = false, _isCamOn = true;
+    private DotNetObjectReference<Chat>? _objRef;
 
     protected override async Task OnInitializedAsync() {
-        hub = new HubConnectionBuilder().WithUrl(Nav.ToAbsoluteUri("/chathub")).WithAutomaticReconnect().Build();
+        hub = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/chathub"))
+            .WithAutomaticReconnect()
+            .Build();
 
-        hub.On<string, string>("ReceiveMessage", (u, t) => InvokeAsync(async () => {
+        hub.On<string, string>("ReceiveMessage", async (u, t) => {
             messages.Add(new Message { User = u, Text = t });
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
             await JS.InvokeVoidAsync("scrollToEnd", "msgList");
-        }));
-
-        hub.On<List<string>>("UserList", async (users) => {
-            if (_inCall && hub != null) {
-                foreach (var id in users) {
-                    var offer = await JS.InvokeAsync<string?>("createOfferGroup", id);
-                    if (offer != null) await hub.SendAsync("SendSignal", offer, id);
-                }
-            }
         });
 
         hub.On<string, string>("ReceiveSignal", async (signal, senderId) => {
+            if (string.IsNullOrEmpty(signal)) return;
+
             await InvokeAsync(async () => {
-                if (hub == null) return;
-                try {
-                    if (signal == "requestList" && _inCall) {
-                        var offer = await JS.InvokeAsync<string?>("createOfferGroup", senderId);
-                        if (offer != null) await hub.SendAsync("SendSignal", offer, senderId);
-                    }
-                    else if (signal.Contains("candidate")) await JS.InvokeVoidAsync("addIceCandidateGroup", signal, senderId);
-                    else if (signal.Contains("offer")) {
-                        var answer = await JS.InvokeAsync<string?>("processOfferGroup", signal, senderId);
-                        if (answer != null) await hub.SendAsync("SendSignal", answer, senderId);
-                    }
-                    else if (signal.Contains("answer")) await JS.InvokeVoidAsync("processAnswerGroup", signal, senderId);
-                } catch { }
+                if (signal == "requestList") {
+                    if (_inCall) await SendOffer(senderId);
+                }
+                else if (signal.Contains("candidate")) 
+                    await JS.InvokeVoidAsync("addIceCandidateGroup", signal, senderId);
+                else if (signal.Contains("\"type\":\"offer\"")) {
+                    var answer = await JS.InvokeAsync<string>("processOfferGroup", signal, senderId);
+                    await SendSignalToHub(answer, senderId);
+                }
+                else if (signal.Contains("\"type\":\"answer\"")) 
+                    await JS.InvokeVoidAsync("processAnswerGroup", signal, senderId);
             });
         });
 
-        hub.On<string>("UserLeft", id => JS.InvokeVoidAsync("removeUser", id));
+        hub.On<string>("UserLeft", async id => {
+            await JS.InvokeVoidAsync("removeUser", id);
+        });
+
+        hub.On<string>("UserJoined", async id => { 
+            if (_inCall) await SendOffer(id); 
+        });
+
         await hub.StartAsync();
-        await JS.InvokeVoidAsync("prepareWebRTC", DotNetObjectReference.Create(this));
     }
 
-    private async Task ToggleCam() {
-        _isCamOn = !_isCamOn;
-        await JS.InvokeVoidAsync("toggleVideo", _isCamOn);
+    protected override async Task OnAfterRenderAsync(bool firstRender) {
+        if (firstRender) {
+            _objRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("prepareWebRTC", _objRef);
+        }
+    }
+
+    [JSInvokable]
+    public async Task SendSignalJS(string signal, string targetId) => await SendSignalToHub(signal, targetId);
+
+    private async Task SendSignalToHub(string signal, string targetId) {
+        if (hub?.State == HubConnectionState.Connected) 
+            await hub.SendAsync("SendSignal", signal, targetId);
+    }
+
+    private async Task SendOffer(string targetId) {
+        var offer = await JS.InvokeAsync<string>("createOfferGroup", targetId);
+        await SendSignalToHub(offer, targetId);
     }
 
     private async Task JoinCall() {
         var ok = await JS.InvokeAsync<bool>("startLocalVideo", "localVideo");
-        if (ok && hub != null) {
+        if (ok) {
             _inCall = true;
-            _isCamOn = true;
-            await hub.SendAsync("SendMessage", "Система", userName + " В ЭФИРЕ");
-            await hub.SendAsync("SendSignal", "requestList", "all");
+            await SendSignalToHub("requestList", "all");
         }
     }
 
     private async Task LeaveCall() {
         _inCall = false;
         await JS.InvokeVoidAsync("hangup");
-        if (hub != null) await hub.SendAsync("SendMessage", "Система", userName + " ВЫШЕЛ");
     }
 
     private async Task Send() {
-        if (hub != null && !string.IsNullOrWhiteSpace(newMessage)) {
+        if (!string.IsNullOrWhiteSpace(newMessage) && hub?.State == HubConnectionState.Connected) {
             await hub.SendAsync("SendMessage", userName, newMessage);
             newMessage = "";
         }
     }
 
     private async Task HandleKeyPress(KeyboardEventArgs e) { if (e.Key == "Enter") await Send(); }
+    
+    private async Task ToggleCam() { 
+        _isCamOn = !_isCamOn; 
+        await JS.InvokeVoidAsync("toggleVideo", _isCamOn); 
+    }
 
-    [JSInvokable] public async Task SendSignalJS(string s, string t) { if (hub != null) await hub.SendAsync("SendSignal", s, t); }
-    public async ValueTask DisposeAsync() { if (hub != null) await hub.DisposeAsync(); }
+    public async ValueTask DisposeAsync() {
+        _objRef?.Dispose();
+        if (hub != null) await hub.DisposeAsync();
+    }
+
     public class Message { public string User { get; set; } = ""; public string Text { get; set; } = ""; }
 }

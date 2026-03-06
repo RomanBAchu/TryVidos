@@ -1,24 +1,29 @@
 @page "/"
+@namespace AMBE.Components
+
 
 @using Microsoft.AspNetCore.Components.Web
-@using AMBE.Pages 
+@using AMBE.Components 
 
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AMBE Messenger</title>
     <base href="/" />
-   
-    <link rel="stylesheet" href="/css/app.css" />
-    <HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+    @* УБРАЛ wwwroot из пути, это важно *@
+    <!-- Подключение CSS-файлов -->
+    <link href="css/spider-man-ps5-base.css" rel="stylesheet" />
+    <link href="css/spider-man-ps5-chat-controls.css" rel="stylesheet" />
+    <link href="css/spider-man-ps5-mobile-effects.css" rel="stylesheet" />
+
+    <HeadOutlet />
 </head>
 <body>
-    @* Прямой вызов компонента *@
-    <Chat @rendermode="new InteractiveServerRenderMode(prerender: false)" /> 
+    @* Если ошибка осталась, значит папка не AMBE.Components *@
+    <AMBE.Components.Chat @rendermode="new InteractiveServerRenderMode(prerender: false)" /> 
 
     <script src="_framework/blazor.web.js"></script>
-    <script src="/js/webrtc.js"></script>
+    <script src="js/webrtc.js"></script>
 </body>
 </html>

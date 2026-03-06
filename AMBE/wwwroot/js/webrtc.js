@@ -39,18 +39,24 @@ window.startLocalVideo = async (id) => {
             video: { width: 320, height: 240, frameRate: 15 },
             audio: true
         });
-        document.getElementById(id).srcObject = localStream;
+        const videoEl = document.getElementById(id);
+        if (videoEl) videoEl.srcObject = localStream;
         return true;
-    } catch (e) { return false; }
+    } catch (e) {
+        console.error("Error accessing media devices.", e);
+        return false;
+    }
 };
 
 function getOrCreatePC(remoteId) {
     if (pcs[remoteId]) return pcs[remoteId];
+
     const pc = new RTCPeerConnection(config);
+    pc.iceQueue = []; // Очередь для кандидатов
     pcs[remoteId] = pc;
 
     if (localStream) {
-        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
 
     pc.onicecandidate = (e) => {
@@ -61,18 +67,37 @@ function getOrCreatePC(remoteId) {
 
     pc.ontrack = (e) => {
         let container = document.getElementById("remoteVideos");
+        if (!container) return;
+
         let vSlot = document.getElementById("slot_" + remoteId);
         if (!vSlot) {
             vSlot = document.createElement("div");
             vSlot.id = "slot_" + remoteId;
-            // ДРУГИЕ КЛИЕНТЫ: Большие прямоугольные окна
+            vSlot.className = "video-slot"; // Используй классы в CSS для красоты
             vSlot.style = "flex: 1 1 200px; max-width: 100%; aspect-ratio: 16/9; background: #000; border: 1px solid #e62429; border-radius: 8px; overflow: hidden; position: relative;";
             vSlot.innerHTML = `<video id="video_${remoteId}" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>`;
             container.appendChild(vSlot);
         }
-        document.getElementById("video_" + remoteId).srcObject = e.streams[0];
+        const remoteVideo = document.getElementById("video_" + remoteId);
+        if (remoteVideo) remoteVideo.srcObject = e.streams[0];
     };
+
+    // Очистка при разрыве соединения
+    pc.onconnectionstatechange = () => {
+        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+            window.removeUser(remoteId);
+        }
+    };
+
     return pc;
+}
+
+// Помощник для обработки очереди кандидатов
+async function processIceQueue(pc) {
+    while (pc.iceQueue.length > 0) {
+        const candidate = pc.iceQueue.shift();
+        await pc.addIceCandidate(candidate).catch(e => console.error("IceQueue error", e));
+    }
 }
 
 window.createOfferGroup = async (id) => {
@@ -87,23 +112,45 @@ window.processOfferGroup = async (json, id) => {
     await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(json)));
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
+    await processIceQueue(pc); // Теперь можно добавлять кандидатов
     return JSON.stringify(ans);
 };
 
 window.processAnswerGroup = async (json, id) => {
-    if (pcs[id]) await pcs[id].setRemoteDescription(new RTCSessionDescription(JSON.parse(json)));
+    const pc = pcs[id];
+    if (pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(json)));
+        await processIceQueue(pc);
+    }
 };
 
 window.addIceCandidateGroup = async (json, id) => {
-    if (pcs[id]) await pcs[id].addIceCandidate(new RTCIceCandidate(JSON.parse(json))).catch(() => { });
+    const pc = pcs[id];
+    if (pc) {
+        const candidate = new RTCIceCandidate(JSON.parse(json));
+        if (pc.remoteDescription && pc.remoteDescription.type) {
+            await pc.addIceCandidate(candidate).catch(e => { });
+        } else {
+            pc.iceQueue.push(candidate);
+        }
+    }
 };
 
 window.removeUser = (id) => {
-    if (pcs[id]) { pcs[id].close(); delete pcs[id]; document.getElementById("slot_" + id)?.remove(); }
+    if (pcs[id]) {
+        pcs[id].close();
+        delete pcs[id];
+        const slot = document.getElementById("slot_" + id);
+        if (slot) slot.remove();
+    }
 };
 
 window.hangup = () => {
     Object.keys(pcs).forEach(id => window.removeUser(id));
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    document.getElementById('localVideo').srcObject = null;
+    if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+    }
+    const localVid = document.getElementById('localVideo');
+    if (localVid) localVid.srcObject = null;
 };
